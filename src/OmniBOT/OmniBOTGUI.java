@@ -8,12 +8,15 @@ public class OmniBOTGUI extends JFrame {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
+	
 	private String window_name;
 	public My_Panel camera_panel;
 	public ButtonPanel buttonPanel;
+	
 	public OmniBOTGUI() {
 		// Create Interface
 		super();
+		
 		window_name = "OmniBOT - Computer Vision Controlled Robot";
 		this.setName(window_name);
 		this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

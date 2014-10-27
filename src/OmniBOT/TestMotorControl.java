@@ -10,22 +10,22 @@ public class TestMotorControl {
 		MotorControl mc = new MotorControl("10.0.1.1");
 		
 		//Try to draw a rectangle
-		Point delta = new Point(100,0);
+		Point delta = new Point(100,100);
 		double[] cartSpeeds = mc.deltaToCartSpeeds(delta);
 		mc.setSpeedsRobot(cartSpeeds);
 		Delay.msDelay(2000);
 		
-		delta = new Point(0,-100);
+		delta = new Point(100,-100);
 		cartSpeeds = mc.deltaToCartSpeeds(delta);
 		mc.setSpeedsRobot(cartSpeeds);
 		Delay.msDelay(2000);
 		
-		delta = new Point(-100,0);
+		delta = new Point(-100,-100);
 		cartSpeeds = mc.deltaToCartSpeeds(delta);
 		mc.setSpeedsRobot(cartSpeeds);
 		Delay.msDelay(2000);
 		
-		delta = new Point(0,100);
+		delta = new Point(-100,100);
 		cartSpeeds = mc.deltaToCartSpeeds(delta);
 		mc.setSpeedsRobot(cartSpeeds);
 		Delay.msDelay(2000);

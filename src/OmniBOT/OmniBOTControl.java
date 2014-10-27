@@ -7,19 +7,21 @@ import org.opencv.core.Point;
 
 public class OmniBOTControl {
 	public static void main(String[] args) {
-		// Load the native library.
+		// Load the native openCV library.
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 
 		// Create image processor
 		Processor my_processor = new Processor();
 
 		// Create Interface
-		OmniBOTGUI gui = null;
-		gui = new OmniBOTGUI();
+		OmniBOTGUI gui = new OmniBOTGUI();
 
 		// Create MotorControl
+		// *BLUETOOTH/*
 		MotorControl motorControl = new MotorControl("10.0.1.1");
-		// Create variables
+
+		// *WIFI/*
+		// MotorControl motorControl = new MotorControl("192.168.43.78");
 
 		// If VideoCapture is opened, start looping
 		if (my_processor.capture.isOpened()) {
@@ -41,36 +43,28 @@ public class OmniBOTControl {
 
 				// Make sure we get an image, else display error message
 				if (!my_processor.workingImage.empty()) {
-					// detectRedCircle and save to my_processor variables
-					my_processor.detectRedCircle();
-					// detectBlueCircle and save to my_processor variables
-					my_processor.detectBlueCircle();
+					// detect robot
+					my_processor.detectRobot();
+					// detect target
+					my_processor.detectTarget();
 
-					/*
-					 * //Debug Point red = my_processor.redCenter; Point blue =
-					 * my_processor.blueCenter;
-					 * System.out.println("Red: "+red.x+", "+red.y);
-					 * System.out.println("Blue: "+blue.x+", "+blue.y);
-					 */
+					// Debug
+					System.out.println("Target: " + my_processor.targetCenter.x
+							+ ", " + my_processor.targetCenter.y);
+					System.out.println("RobotCenter: "
+							+ my_processor.robotCenter.x + ", "
+							+ my_processor.robotCenter.y);
 
-					// paint circles to processedImage
+					// paint circles & line to processedImage
 					my_processor.paintRedCircle();
 					my_processor.paintBlueCircle();
-					// my_processor.paintGreenCircle();
+					my_processor.paintGreenCircle();
+					my_processor.paintRobotCircle();
 
-					// Print size and fps information on picture
-					my_processor.putSizeAndFPS(fps);
-
-					// Display the image
-					gui.camera_panel
-							.MatToBufferedImage(my_processor.processedImage);
-					gui.camera_panel.repaint();
-
-					// lets get endTime, then calculate elapsedTime, which can
-					// then be used to get an approximate of the fps
-					long endTime = System.nanoTime();
-					long elapsedTime = (endTime - startTime) / 1000000;
-					fps = (int) (1000 / elapsedTime);
+					if (gui.buttonPanel.showInfoPressed) {
+						// Print size and fps information on picture
+						my_processor.putSizeAndFPS(fps);
+					}
 
 				} else {
 					// if no image was recorded, show error message and start
@@ -78,32 +72,111 @@ public class OmniBOTControl {
 					System.out.println(" --(!) No captured frame -- Break!");
 					break;
 				}
-				
-				 if(gui.buttonPanel.goToBluePressed){ 
-					 //Draw line from red to blue
-					 my_processor.drawLineBlueRed();
-					 
-					 //Set speeds to go to blue target, assuming red target is robot.
-					 //Get delta between red and blue
-					 Point delta = motorControl.getDelta(my_processor.redCenter, my_processor.blueCenter);
-					//System.out.println("Delta: "+delta.x+", "+delta.y);
-					 motorControl.setSpeedsRobot(motorControl.deltaToCartSpeeds(delta));
-				 } 
-				 
-				 if(gui.buttonPanel.stopPressed){ 
-					 try {
-						 motorControl.a.stop(true); 
-						 motorControl.b.stop(true);
-						 motorControl.c.stop(true); 
-					 } catch (RemoteException e) { //
-						 e.printStackTrace(); 
-					 }
-				 
-				 motorControl.closeMotorPorts(); }
-				 
+				double distanceFromTarget = 50;
+				if (gui.buttonPanel.goToBluePressed) {
+					// Set speeds to go to blue target, assuming red target is
+					// robot.
+					// Get delta between red and blue
+
+					// If either robot or target has coordinates 0,0 they have
+					// not been properly detected.
+					// If either robot or target is 0,0 we don't want anything
+					// to happen
+
+					if (!((my_processor.robotCenter.x == 0 && my_processor.robotCenter.y == 0) || (my_processor.targetCenter.x == 0 && my_processor.targetCenter.y == 0))) {
+						if (Math.sqrt(Math.pow(my_processor.robotCenter.x
+								- my_processor.targetCenter.x, 2)
+								+ Math.pow(my_processor.robotCenter.y
+										- my_processor.targetCenter.y, 2)) > distanceFromTarget) {
+							// Draw line from robotCenter to target
+							my_processor.drawLine(my_processor.robotCenter,
+									my_processor.targetCenter);
+							Point delta = motorControl.getDelta(
+									my_processor.robotCenter,
+									my_processor.targetCenter);
+							System.out.println("Delta: " + delta.x + ", "
+									+ delta.y);
+							my_processor.saveRobotAngle();
+							double robotAngle = my_processor.robotAngle;
+							System.out.println("Robot Angle: " + robotAngle);
+
+							motorControl.setSpeedsRobot(motorControl
+									.deltaToCartSpeeds(delta, robotAngle));
+						} else {
+							try {
+								motorControl.a.stop(true);
+								motorControl.b.stop(true);
+								motorControl.c.stop(true);
+							} catch (RemoteException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
+						}
+					}
+				} else {
+
+					if (Math.sqrt(Math.pow(my_processor.robotCenter.x
+							- my_processor.videoCenter.x, 2)
+							+ Math.pow(my_processor.robotCenter.y
+									- my_processor.videoCenter.y, 2)) > distanceFromTarget) {
+						Point delta = motorControl.getDelta(
+								my_processor.robotCenter,
+								my_processor.videoCenter);
+						my_processor.saveRobotAngle();
+						double robotAngle = my_processor.robotAngle;
+						motorControl.setSpeedsRobot(motorControl
+								.deltaToCartSpeeds(delta, robotAngle));
+					} else {
+						try {
+							motorControl.a.stop(true);
+							motorControl.b.stop(true);
+							motorControl.c.stop(true);
+						} catch (RemoteException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+					}
+
+				}
+
+				if (gui.buttonPanel.stopPressed) {
+					try {
+						motorControl.a.stop(true);
+						motorControl.b.stop(true);
+						motorControl.c.stop(true);
+					} catch (RemoteException e) {
+						e.printStackTrace();
+					}
+
+					motorControl.closeMotorPorts();
+					System.exit(0);
+				}
+
+				if (gui.buttonPanel.rotatePressed) {
+					if (motorControl.rotationSpeed == 0) {
+						motorControl.rotationSpeed = Math.PI / 4;
+					}
+				} else {
+					if (motorControl.rotationSpeed != 0) {
+						motorControl.rotationSpeed = 0;
+					}
+				}
+				// Display the image
+				gui.camera_panel
+						.MatToBufferedImage(my_processor.processedImage);
+				gui.camera_panel.repaint();
+
+				// lets get endTime, then calculate elapsedTime, which can
+				// then be used to get an approximate of the fps
+				// This should be LAST in the loop
+				long endTime = System.nanoTime();
+				long elapsedTime = (endTime - startTime) / 1000000;
+				fps = (int) (1000 / elapsedTime);
 
 			}
+
 		}
+
 		return;
 	}
 }

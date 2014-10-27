@@ -12,55 +12,131 @@ import org.opencv.core.Size;
 import org.opencv.highgui.VideoCapture;
 import org.opencv.imgproc.Imgproc;
 
-
 public class Processor {
-	public Point blueCenter,greenCenter,redCenter;
-	public float redSize, blueSize,greenSize;
-	int red,blue,green;
+	public Point blueCenter, greenCenter, redCenter, targetCenter, robotCenter,
+			videoCenter;
+	public float redSize, blueSize, greenSize;
+	int red, blue, green, robot, nbrNoFindRed, nbrNoFindGreen, nbrNoFindBlue,
+			nbrNoFindLimit;
 	public Mat workingImage;
 	public Mat processedImage;
 	public VideoCapture capture;
+	double robotAngle;
 
 	// Create a constructor method
 	public Processor() {
-		
-		//initialize variables
+
+		// initialize variables
 		workingImage = new Mat();
 		processedImage = new Mat();
-		capture = new VideoCapture(0);
+		capture = new VideoCapture(0); // Choose camera (0 = default)
 		red = 0;
-		blue=1;
-		green=2;
+		blue = 1;
+		green = 2;
+		robot = 3;
+		nbrNoFindRed = 0;
+		nbrNoFindGreen = 0;
+		nbrNoFindBlue = 0;
+		nbrNoFindLimit = 5;
 		setToZero();
-		
+
 	}
-	
-	private void setToZero(){
+
+	public void detectTarget() {
+		detectBlueCircle();
+		targetCenter = blueCenter;
+	}
+
+	public void detectRobot() {
+		detectRedCircle();
+		detectGreenCircle();
+		robotCenter = getRobotCenter(greenCenter, redCenter);
+	}
+
+	public Point getRobotCenter(Point a, Point b) {
+		if (!(a.x == 0 && a.y == 0) || (b.x == 0 && b.y == 0)) {
+			return new Point((a.x + b.x) / 2, (a.y + b.y) / 2);
+		} else {
+			return new Point(0, 0);
+		}
+	}
+
+	public void saveRobotAngle() {
+		if (nbrNoFindGreen == 0 && nbrNoFindRed == 0) {
+			if (!(greenCenter.x == 0 && greenCenter.y == 0 || robotCenter.x == 0
+					&& robotCenter.y == 0)) {
+				robotAngle = getRobotAngle(greenCenter, robotCenter);
+			}
+		}
+	}
+
+	public double getRobotAngle(Point greenCenter, Point robotCenter) {
+		// First quadrant
+		double robotAngle;
+		if (greenCenter.x > robotCenter.x && greenCenter.y < robotCenter.y) {
+			double angle = Math.atan2(robotCenter.y - greenCenter.y,
+					greenCenter.x - robotCenter.x);
+			robotAngle = (3 * Math.PI) / 2 + angle;
+		}
+		// Second quadrant
+		else if (greenCenter.x < robotCenter.x && greenCenter.y < robotCenter.y) {
+			double angle = Math.atan2(robotCenter.x - greenCenter.x,
+					robotCenter.y - greenCenter.y);
+			robotAngle = angle;
+		}
+		// third
+		else if (greenCenter.x < robotCenter.x && greenCenter.y > robotCenter.y) {
+			double angle = Math.atan2(greenCenter.y - robotCenter.y,
+					robotCenter.x - greenCenter.x);
+			robotAngle = angle + Math.PI / 2;
+		}
+		// forth
+		else {
+			double angle = Math.atan2(greenCenter.x - robotCenter.x,
+					greenCenter.y - robotCenter.y);
+			robotAngle = Math.PI + angle;
+		}
+		return robotAngle;
+	}
+
+	private void setToZero() {
 		redCenter = new Point();
 		redSize = 0;
 		blueCenter = new Point();
 		blueSize = 0;
 		greenCenter = new Point();
 		greenSize = 0;
-	}
-	
-	public Size getImageSize(){
-		return new Size(workingImage.width(),workingImage.height());
-	}
-	
-	public void readWebcam(){
-		capture.read(workingImage);
-		Size size = new Size(getImageSize().width / 2,
-				getImageSize().height / 2);
-		Imgproc.resize(workingImage, workingImage, size);
-		processedImage=workingImage;
-		setToZero();
+		targetCenter = new Point();
+		robotCenter = new Point();
+		videoCenter = new Point();
+		robotAngle = 0;
 	}
 
-	public void drawLineBlueRed(){
-		Core.line(processedImage, redCenter, blueCenter, new Scalar(0));
+	// Get the current ImageSize
+	public Size getImageSize() {
+		return new Size(workingImage.width(), workingImage.height());
 	}
-	
+
+	// Resize this image to wantedWidth??? (wantedWidth is the defining length)
+	public void readWebcam() {
+		capture.read(workingImage);
+		Size size = getImageSize();
+		double wantedWidth = 1200;
+		double scaleFactor = wantedWidth / size.width;
+		size = new Size(size.width * scaleFactor, size.height * scaleFactor);
+
+		Imgproc.resize(workingImage, workingImage, size);
+		processedImage = workingImage;
+		videoCenter = new Point(workingImage.width() / 2,
+				workingImage.height() / 2);
+	}
+
+	public void drawLine(Point a, Point b) {
+		//if (!((a.x == 0 && a.y == 0) || (b.x == 0 && b.y == 0))) {
+			Core.line(processedImage, a, b, new Scalar(0), 4);
+		//}
+	}
+
 	private Mat blueToBinary(Mat inputframe) {
 		// Setting variables and constants
 		Mat hsv_image = new Mat();
@@ -76,8 +152,8 @@ public class Processor {
 		Imgproc.cvtColor(inputframe, hsv_image, Imgproc.COLOR_BGR2HSV);
 
 		// Threshold values
-		Scalar hsv_min = new Scalar(110, 50, 50, 0);
-		Scalar hsv_max = new Scalar(130, 255, 255, 0);
+		Scalar hsv_min = new Scalar(100, 100, 100, 0);
+		Scalar hsv_max = new Scalar(150, 255, 255, 0);
 		Mat thresholded = new Mat();
 		Mat thresholded2 = new Mat();
 
@@ -94,9 +170,10 @@ public class Processor {
 		Core.inRange(distance, new Scalar(0.0), new Scalar(200.0), thresholded2);
 		Core.bitwise_and(thresholded, thresholded2, thresholded);
 		Imgproc.GaussianBlur(thresholded, returnFrame, new Size(9, 9), 0, 0);
-		
+
 		return returnFrame;
 	}
+
 	private Mat greenToBinary(Mat inputframe) {
 		// Setting variables and constants
 		Mat hsv_image = new Mat();
@@ -112,7 +189,7 @@ public class Processor {
 		Imgproc.cvtColor(inputframe, hsv_image, Imgproc.COLOR_BGR2HSV);
 
 		// Threshold values
-		Scalar hsv_min = new Scalar(40, 50, 50, 0);
+		Scalar hsv_min = new Scalar(40, 100, 100, 0);
 		Scalar hsv_max = new Scalar(80, 255, 255, 0);
 		Mat thresholded = new Mat();
 		Mat thresholded2 = new Mat();
@@ -120,7 +197,7 @@ public class Processor {
 		// Actual processing
 		Core.inRange(hsv_image, hsv_min, hsv_max, thresholded);
 		// We get 3 2D one channel Mats
-		Core.split(hsv_image, lhsv); 
+		Core.split(hsv_image, lhsv);
 		Mat S = lhsv.get(1);
 		Mat V = lhsv.get(2);
 		Core.subtract(array255, S, S);
@@ -131,7 +208,7 @@ public class Processor {
 		Core.inRange(distance, new Scalar(0.0), new Scalar(200.0), thresholded2);
 		Core.bitwise_and(thresholded, thresholded2, thresholded);
 		Imgproc.GaussianBlur(thresholded, returnFrame, new Size(9, 9), 0, 0);
-		
+
 		return returnFrame;
 	}
 
@@ -150,9 +227,9 @@ public class Processor {
 		Imgproc.cvtColor(inputframe, hsv_image, Imgproc.COLOR_BGR2HSV);
 
 		// Threshold values
-		Scalar hsv_min = new Scalar(0, 50, 50, 0);
-		Scalar hsv_max = new Scalar(10, 255, 255, 0);
-		Scalar hsv_min2 = new Scalar(170, 50, 50, 0);
+		Scalar hsv_min = new Scalar(0, 100, 100, 0);
+		Scalar hsv_max = new Scalar(15, 255, 255, 0);
+		Scalar hsv_min2 = new Scalar(165, 100, 100, 0);
 		Scalar hsv_max2 = new Scalar(180, 255, 255, 0);
 		Mat thresholded = new Mat();
 		Mat thresholded2 = new Mat();
@@ -192,87 +269,130 @@ public class Processor {
 			for (int i = 0; i < data.length; i = i + 3) {
 				Point center = new Point(data[i], data[i + 1]);
 				float radius = data[i + 2];
-				switch (color) {
-				case 0:
-					redCenter = center;
-					redSize = radius;
-					break;
-				case 1:
-					blueCenter = center;
-					blueSize = radius;
-					break;
-				case 2:
-					greenCenter = center;
-					greenSize = radius;
-					break;
+				if (center.x != 0 && center.y != 0) {
+					switch (color) {
+					case 0:
+						redCenter = center;
+						redSize = radius;
+						break;
+					case 1:
+						blueCenter = center;
+						blueSize = radius;
+						break;
+					case 2:
+						greenCenter = center;
+						greenSize = radius;
+						break;
+					}
+				} else {
+					switch (color) {
+					case 0:
+						nbrNoFindRed++;
+						if (nbrNoFindRed > nbrNoFindLimit) {
+							redCenter = new Point(0, 0);
+							redSize = 0;
+						}
+						break;
+					case 1:
+						nbrNoFindBlue++;
+						if (nbrNoFindBlue > nbrNoFindLimit) {
+							blueCenter = new Point(0, 0);
+							blueSize = 0;
+						}
+						break;
+					case 2:
+						nbrNoFindGreen++;
+						if (nbrNoFindGreen > nbrNoFindLimit) {
+							greenCenter = new Point(0, 0);
+							greenSize = 0;
+						}
+						break;
+					}
 				}
+
 			}
 		}
 	}
 
-	//detect red
-	public void detectRedCircle(){
+	// detect red
+	public void detectRedCircle() {
 		detectRedCircle(workingImage);
 	}
-	
+
 	private void detectRedCircle(Mat inputFrame) {
 		detectCircles(redToBinary(inputFrame), red);
 	}
-	
-	//detect green
-	public void detectGreenCircle(){
+
+	// detect green
+	public void detectGreenCircle() {
 		detectGreenCircle(workingImage);
 	}
-	
+
 	private void detectGreenCircle(Mat inputFrame) {
 		detectCircles(greenToBinary(inputFrame), green);
 	}
-	
-	//Detect blue
-	public void detectBlueCircle(){
+
+	// Detect blue
+	public void detectBlueCircle() {
 		detectBlueCircle(workingImage);
 	}
-	
+
 	private void detectBlueCircle(Mat inputFrame) {
 		detectCircles(blueToBinary(inputFrame), blue);
 	}
-	
-	//Paint red
-	public void paintRedCircle(){
-		processedImage=paintRedCircle(processedImage);
+
+	// Paint red
+	public void paintRedCircle() {
+		processedImage = paintRedCircle(processedImage);
 	}
+
 	private Mat paintRedCircle(Mat inputFrame) {
 		return paintCircle(inputFrame, redCenter, redSize, red);
 	}
-	
-	//Paint blue
-	public void paintBlueCircle(){
-		processedImage=paintBlueCircle(processedImage);
+
+	// Paint blue
+	public void paintBlueCircle() {
+		processedImage = paintBlueCircle(processedImage);
 	}
+
 	private Mat paintBlueCircle(Mat inputFrame) {
 		return paintCircle(inputFrame, blueCenter, blueSize, blue);
 	}
-	
-	//Paint green
-	public void paintGreenCircle(){
-		processedImage=paintGreenCircle(processedImage);
+
+	// Paint green
+	public void paintGreenCircle() {
+		processedImage = paintGreenCircle(processedImage);
 	}
+
 	private Mat paintGreenCircle(Mat inputFrame) {
 		return paintCircle(inputFrame, greenCenter, greenSize, green);
 	}
-	
-	//General paint-code
-	private Mat paintCircle(Mat inputFrame, Point center, float radius,int color) {
+
+	public void paintRobotCircle() {
+		processedImage = paintRobotCircle(processedImage);
+	}
+
+	private Mat paintRobotCircle(Mat inputFrame) {
+		return paintCircle(inputFrame, robotCenter, getRobotSize(), robot);
+	}
+
+	private float getRobotSize() {
+		return (redSize + greenSize) * 2;
+	}
+
+	// General paint-code
+	private Mat paintCircle(Mat inputFrame, Point center, float radius,
+			int color) {
 		Scalar scalar;
 		switch (color) {
 		case 0:
 			scalar = new Scalar(0, 0, 255);
 			break;
 		case 1:
-			scalar = new Scalar(255,0,0);
+			scalar = new Scalar(255, 0, 0);
 			break;
 		case 2:
-			scalar = new Scalar(0,255,0);
+			scalar = new Scalar(0, 255, 0);
 			break;
 		default:
 			scalar = new Scalar(0, 0, 0); // black
@@ -285,13 +405,16 @@ public class Processor {
 				(double) radius), 0, 0, 360, scalar, 4, 8, 0);
 		return returnFrame;
 	}
-	
-	public void putSizeAndFPS(int fps){
-		processedImage = putSizeAndFPS(processedImage,(int)getImageSize().width,(int)getImageSize().height, fps);
+
+	public void putSizeAndFPS(int fps) {
+		processedImage = putSizeAndFPS(processedImage,
+				(int) getImageSize().width, (int) getImageSize().height, fps);
 	}
-	private Mat putSizeAndFPS(Mat inputFrame,int w, int h, int fps){
+
+	private Mat putSizeAndFPS(Mat inputFrame, int w, int h, int fps) {
 		Mat returnFrame = inputFrame;
-		Core.putText(returnFrame, w+"x"+h+", "+fps+" fps", new Point(1,21), 2, 0.8, new Scalar(200,200,200,255));
+		Core.putText(returnFrame, w + "x" + h + ", " + fps + " Hz", new Point(
+				1, 21), 2, 0.8, new Scalar(200, 200, 200, 255));
 		return returnFrame;
 	}
 

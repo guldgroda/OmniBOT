@@ -14,6 +14,7 @@ import org.opencv.core.Mat;
 
 class My_Panel extends JPanel {
 	private static final long serialVersionUID = 1L;
+	
 	private BufferedImage image;
 
 	// Create a constructor method

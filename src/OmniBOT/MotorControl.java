@@ -17,6 +17,7 @@ public class MotorControl {
 	RemoteEV3 ev3;
 	double[][] transformation1;
 	double maxSpeed;
+	double rotationSpeed;
 	
 	
 	public MotorControl(String ip) {
@@ -37,7 +38,8 @@ public class MotorControl {
 		b = ev3.createRegulatedMotor("B", 'N');
 		c = ev3.createRegulatedMotor("C", 'N');
 		
-		maxSpeed = 0.15;
+		maxSpeed = 0.15; // i m/s
+		rotationSpeed=0;
 	}
 	
 	public void setSpeedsRobot(double[] cartSpeeds){
@@ -57,6 +59,10 @@ public class MotorControl {
 	
 	public void closeMotorPorts(){
 		try {
+			a.stop(true);
+			b.stop(true);
+			c.stop(true);
+
 			LCD.clear();
 			LCD.drawString("Closing ports", 0, 1);
 			a.close();
@@ -111,13 +117,24 @@ public class MotorControl {
 		return motorSpeeds;
 	}
 	
-	public double[] deltaToCartSpeeds(Point delta){
+	public double[] deltaToCartSpeeds(Point delta, double robotAngle){
+		//We only want the robot to move with maxSpeed, so we calculate a speedFactor to multiply the delta components with to get a magnitude maxSpeed.
 		double speedFactor = maxSpeed/Math.sqrt((delta.x*delta.x+delta.y*delta.y));
+		//Debug print
 		System.out.println("Speed factor= "+speedFactor);
-		double[] returnSpeeds = new double[3];
-		returnSpeeds[0]=delta.x*speedFactor;
-		returnSpeeds[1]=delta.y*speedFactor;
-		returnSpeeds[2]=0;
+		//Save our desired speeds in video cartesian coordinates
+		double[] videoSpeeds = {delta.x*speedFactor,delta.y*speedFactor,rotationSpeed};
+		
+		//Define transformation matrix from video coordinates to robot coordinates
+		double[][] transformation2={{Math.cos(robotAngle),-Math.sin(robotAngle),0},{-Math.sin(robotAngle),-Math.cos(robotAngle),0},{0,0,1}};
+		
+		double[] returnSpeeds = {0,0,0};
+		//Do the matrix multiplication and save returnSpeeds.
+		for (int i = 0; i < 3; i++) {
+			returnSpeeds[0] += transformation2[0][i] * videoSpeeds[i];
+			returnSpeeds[1] += transformation2[1][i] * videoSpeeds[i];
+			returnSpeeds[2] += transformation2[2][i] * videoSpeeds[i];
+		}
 		return returnSpeeds;
 	}
 	
@@ -128,4 +145,5 @@ public class MotorControl {
 		return new Point(dx,dy);
 		
 	}
+
 }
